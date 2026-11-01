@@ -1,5 +1,6 @@
 export type Flashcard = {
   id: string
+  lessonId: string
   kanji: string
   reading: string
   meaning: string
@@ -8,4 +9,11 @@ export type Flashcard = {
   updatedAt: string
 }
 
-export type FlashcardDraft = Omit<Flashcard, 'id' | 'createdAt' | 'updatedAt'>
+export type FlashcardDraft = Omit<Flashcard, 'id' | 'lessonId' | 'createdAt' | 'updatedAt'>
+
+export type Lesson = {
+  id: string
+  title: string
+  description: string
+  createdAt: string
+}
