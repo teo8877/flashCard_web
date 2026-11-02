@@ -40,6 +40,12 @@ export async function upsertCloudLesson(lesson: Lesson) {
   if (error) throw error
 }
 
+export async function deleteCloudLesson(id: string) {
+  if (!supabase) return
+  const { error } = await supabase.from('lessons').delete().eq('id', id)
+  if (error) throw error
+}
+
 export async function upsertCloudCard(card: Flashcard) {
   if (!supabase) return
   const { error } = await supabase.from('flashcards').upsert({

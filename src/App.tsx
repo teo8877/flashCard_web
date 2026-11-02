@@ -7,7 +7,7 @@ import type { User } from '@supabase/supabase-js'
 import type { Flashcard, FlashcardDraft, Lesson } from './types/flashcard'
 import { exportCards, parseCardsFile } from './utils/importExport'
 import { defaultLesson, loadCards, loadLessons, loadTheme, saveCards, saveLessons, saveTheme } from './utils/storage'
-import { deleteCloudCard, fetchCloudData, isCloudConfigured, supabase, upsertCloudCard, upsertCloudLesson } from './utils/supabase'
+import { deleteCloudCard, deleteCloudLesson, fetchCloudData, isCloudConfigured, supabase, upsertCloudCard, upsertCloudLesson } from './utils/supabase'
 
 const emptyDraft: FlashcardDraft = { kanji: '', reading: '', meaning: '', note: '' }
 const faceLabels = ['Kanji', 'Cách đọc', 'Nghĩa', 'Âm Hán-Việt']
@@ -28,6 +28,7 @@ export default function App() {
   const [modal, setModal] = useState<'add' | 'edit' | null>(null)
   const [editing, setEditing] = useState<Flashcard | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [deleteLessonId, setDeleteLessonId] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [theme, setTheme] = useState<'light' | 'dark'>(loadTheme)
   const [shuffled, setShuffled] = useState(false)
@@ -158,6 +159,29 @@ export default function App() {
     setFace(0)
     setToast(`Đã tạo ${lesson.title}`)
   }
+  const renameLesson = () => {
+    if (!selectedLesson || !user) return
+    const title = window.prompt('Tên bài mới', selectedLesson.title)
+    if (!title?.trim() || title.trim() === selectedLesson.title) return
+    const updated = { ...selectedLesson, title: title.trim() }
+    setLessons((current) => current.map((lesson) => lesson.id === updated.id ? updated : lesson))
+    void upsertCloudLesson(updated).catch(() => setToast('Không thể đổi tên bài trên máy chủ'))
+    setToast('Đã đổi tên bài')
+  }
+  const confirmDeleteLesson = () => {
+    if (!deleteLessonId || lessons.length <= 1) return
+    const remainingLessons = lessons.filter((lesson) => lesson.id !== deleteLessonId)
+    const remainingCards = cards.filter((card) => card.lessonId !== deleteLessonId)
+    const nextLesson = remainingLessons[0]
+    setLessons(remainingLessons)
+    setCards(remainingCards)
+    setSelectedLessonId(nextLesson.id)
+    setSelectedId(remainingCards.find((card) => card.lessonId === nextLesson.id)?.id ?? null)
+    setDeleteLessonId(null)
+    setFace(0)
+    setToast('Đã xóa bài và các thẻ thuộc bài')
+    if (user) void deleteCloudLesson(deleteLessonId).catch(() => setToast('Không thể xóa bài trên máy chủ'))
+  }
 
   return (
     <div className="min-h-screen bg-[#f7f8fc] text-slate-900 transition-colors dark:bg-[#10131b] dark:text-slate-100">
@@ -169,7 +193,7 @@ export default function App() {
       </header>
       <main className="mx-auto max-w-[1400px] px-5 py-8 lg:px-10">
         <div className="mb-8 flex flex-wrap items-end justify-between gap-4"><div><p className="eyebrow">BỘ THẺ CỦA BẠN</p><h2 className="mt-1 font-display text-3xl font-bold tracking-tight">Học mỗi ngày, nhớ lâu hơn.</h2><p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Tập trung vào từng từ, từng bước một.</p></div><div className="flex items-center gap-2 text-sm font-semibold text-slate-500 dark:text-slate-400"><Layers size={17} className="text-teal-500" /> {cards.filter((card) => card.lessonId === selectedLessonId).length} thẻ trong {selectedLesson?.title}</div></div>
-        <div className="lesson-bar"><div className="flex min-w-0 items-center gap-3"><BookOpen size={18} className="text-teal-500" /><div className="min-w-0"><p className="eyebrow">DANH SÁCH BÀI HỌC</p><p className="truncate font-display font-bold">{selectedLesson?.title}</p></div></div><div className="flex items-center gap-2"><select className="lesson-select" value={selectedLessonId} onChange={(event) => { setSelectedLessonId(event.target.value); setSelectedId(null); setFace(0) }}>{lessons.map((lesson) => <option key={lesson.id} value={lesson.id}>{lesson.title} ({cards.filter((card) => card.lessonId === lesson.id).length} từ)</option>)}</select>{user && <button className="primary-btn" onClick={addLesson}><Plus size={16} /> <span className="hidden sm:inline">Thêm bài</span></button>}</div></div>
+        <div className="lesson-bar"><div className="flex min-w-0 items-center gap-3"><BookOpen size={18} className="text-teal-500" /><div className="min-w-0"><p className="eyebrow">DANH SÁCH BÀI HỌC</p><p className="truncate font-display font-bold">{selectedLesson?.title}</p></div></div><div className="lesson-actions"><select className="lesson-select" value={selectedLessonId} onChange={(event) => { setSelectedLessonId(event.target.value); setSelectedId(null); setFace(0) }}>{lessons.map((lesson) => <option key={lesson.id} value={lesson.id}>{lesson.title} ({cards.filter((card) => card.lessonId === lesson.id).length} từ)</option>)}</select>{user && <><button className="lesson-icon-btn" title="Đổi tên bài" aria-label="Đổi tên bài" onClick={renameLesson}><Edit3 size={15} /></button><button className="lesson-icon-btn delete" title="Xóa bài" aria-label="Xóa bài" disabled={lessons.length <= 1} onClick={() => setDeleteLessonId(selectedLessonId)}><Trash2 size={15} /></button><button className="primary-btn" onClick={addLesson}><Plus size={16} /> <span className="hidden sm:inline">Thêm bài</span></button></>}</div></div>
         <div className="grid gap-8 xl:grid-cols-[minmax(0,1.3fr)_390px]">
           <section className={studyFullscreen ? 'study-section study-fullscreen' : 'study-section'}>
             <div className="mb-4 flex items-center justify-between"><div className="flex items-center gap-2"><span className="eyebrow">CHẾ ĐỘ HỌC</span>{selected && <span className="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-bold text-teal-600 dark:bg-teal-900/30 dark:text-teal-300">{selectedIndex + 1} / {visibleCards.length}</span>}</div><div className="flex items-center gap-2"><button className="secondary-btn" onClick={() => setShuffled(!shuffled)}><Shuffle size={15} /> {shuffled ? 'Đã trộn' : 'Trộn thẻ'}</button><button className="secondary-btn" onClick={() => setStudyFullscreen(!studyFullscreen)}>{studyFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}<span className="hidden sm:inline">{studyFullscreen ? 'Thoát toàn màn hình' : 'Toàn màn hình'}</span></button></div></div>
@@ -186,6 +210,7 @@ export default function App() {
       {loginOpen && <LoginModal error={authError} onClose={() => { setLoginOpen(false); setAuthError('') }} onLogin={async (email, password) => { if (!supabase) return; const result = await supabase.auth.signInWithPassword({ email, password }); if (result.error) setAuthError('Email hoặc mật khẩu không đúng.'); else { setLoginOpen(false); setAuthError('') } }} />}
       {modal && user && <FlashcardModal mode={modal} initial={editing ?? emptyDraft} onClose={() => { setModal(null); setEditing(null) }} onSave={saveDraft} />}
       {deleteId && <ConfirmModal onCancel={() => setDeleteId(null)} onConfirm={confirmDelete} />}
+      {deleteLessonId && <LessonConfirmModal lesson={lessons.find((lesson) => lesson.id === deleteLessonId)} onCancel={() => setDeleteLessonId(null)} onConfirm={confirmDeleteLesson} />}
       {toast && <div className="toast"><Check size={17} /> {toast}</div>}
     </div>
   )
@@ -201,6 +226,10 @@ function FlashcardModal({ mode, initial, onClose, onSave }: { mode: 'add' | 'edi
 
 function ConfirmModal({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) {
   return <div className="modal-backdrop"><div className="modal max-w-md"><div className="flex h-11 w-11 items-center justify-center rounded-full bg-rose-50 text-rose-500 dark:bg-rose-900/20"><Trash2 size={20} /></div><h2 className="mt-4 font-display text-2xl font-bold">Xóa thẻ này?</h2><p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">Thao tác này không thể hoàn tác. Bạn có chắc muốn xóa thẻ khỏi bộ từ vựng?</p><div className="mt-7 flex justify-end gap-3"><button className="nav-btn" onClick={onCancel}>Hủy</button><button className="danger-btn" onClick={onConfirm}><Trash2 size={16} /> Xóa thẻ</button></div></div></div>
+}
+
+function LessonConfirmModal({ lesson, onCancel, onConfirm }: { lesson?: Lesson; onCancel: () => void; onConfirm: () => void }) {
+  return <div className="modal-backdrop"><div className="modal max-w-md"><div className="flex h-11 w-11 items-center justify-center rounded-full bg-rose-50 text-rose-500 dark:bg-rose-900/20"><Trash2 size={20} /></div><h2 className="mt-4 font-display text-2xl font-bold">Xóa {lesson?.title ?? 'bài học'}?</h2><p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">Các thẻ thuộc bài này cũng sẽ bị xóa. Thao tác này không thể hoàn tác.</p><div className="mt-7 flex justify-end gap-3"><button className="nav-btn" onClick={onCancel}>Hủy</button><button className="danger-btn" onClick={onConfirm}><Trash2 size={16} /> Xóa bài</button></div></div></div>
 }
 
 function LoginModal({ error, onClose, onLogin }: { error: string; onClose: () => void; onLogin: (email: string, password: string) => Promise<void> }) {
